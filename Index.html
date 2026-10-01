@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Link de reseña</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        max-width: 480px;
+        padding: 16px;
+        padding-top: calc(16px + env(safe-area-inset-top));
+        padding-bottom: calc(24px + env(safe-area-inset-bottom));
+        padding-left: calc(16px + env(safe-area-inset-left));
+        padding-right: calc(16px + env(safe-area-inset-right));
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 16px;
+        line-height: 1.35;
+        color: #111;
+        background: #fff;
+      }
+      h1 {
+        font-size: 22px;
+        line-height: 1.2;
+        margin: 8px 0 4px;
+      }
+      p.ayuda {
+        margin: 0 0 16px;
+        font-size: 16px;
+      }
+      .campo + .campo {
+        margin-top: 16px;
+      }
+      label {
+        display: block;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      input[type="text"],
+      textarea {
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding: 12px 14px;
+        font: inherit;
+        font-size: 16px;
+        line-height: 1.35;
+        color: #111;
+        background: #fff;
+        border: 1px solid #767676;
+        border-radius: 10px;
+      }
+      input[type="text"] {
+        min-height: 48px;
+      }
+      textarea {
+        min-height: 112px;
+        word-break: break-all;
+        resize: none;
+      }
+      button {
+        display: block;
+        width: 100%;
+        min-height: 48px;
+        margin-top: 12px;
+        padding: 12px 14px;
+        font: inherit;
+        font-size: 18px;
+        font-weight: 600;
+        color: #fff;
+        background: #111;
+        border: 0;
+        border-radius: 10px;
+      }
+      button:disabled {
+        opacity: 0.55;
+      }
+      button.limpiar {
+        color: #111;
+        background: #fff;
+        border: 1px solid #767676;
+      }
+      button.lugar {
+        min-height: 64px;
+        margin-top: 8px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 16px;
+        color: #111;
+        background: #fff;
+        border: 1px solid #767676;
+      }
+      button.lugar.activo {
+        color: #fff;
+        background: #111;
+        border-color: #111;
+      }
+      button.lugar .dir {
+        display: block;
+        margin-top: 4px;
+        font-size: 16px;
+        font-weight: 400;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 20px 0 8px;
+      }
+      #mensaje {
+        margin: 12px 0 0;
+        font-size: 16px;
+      }
+      #link {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Link de reseña</h1>
+    <p class="ayuda">Escribí el nombre del lugar. La calle y la altura son opcionales.</p>
+
+    <form id="form" method="get" target="_top">
+      <input type="hidden" name="busco" value="1">
+      <div class="campo">
+        <label for="nombre">Nombre del lugar</label>
+        <input
+          id="nombre"
+          name="nombre"
+          type="text"
+          enterkeyhint="next"
+          autocomplete="organization"
+        >
+      </div>
+      <div class="campo">
+        <label for="calle">Calle y altura (opcional)</label>
+        <input
+          id="calle"
+          name="calle"
+          type="text"
+          enterkeyhint="search"
+          autocomplete="street-address"
+        >
+      </div>
+      <button type="submit" id="buscar">Buscar</button>
+      <button type="button" id="limpiar" class="limpiar">Limpiar</button>
+    </form>
+
+    <p id="mensaje" role="status"></p>
+    <div id="lista"></div>
+
+    <div id="link">
+      <h2>Link para el cartel</h2>
+      <textarea id="url" readonly></textarea>
+      <button type="button" id="copiar">Copiar link</button>
+    </div>
+
+    <script>
+      var DATOS = null;
+
+      document.getElementById('copiar').addEventListener('click', copiar);
+      document.getElementById('limpiar').addEventListener('click', limpiar);
+
+      function limpiar() {
+        document.getElementById('nombre').value = '';
+        document.getElementById('calle').value = '';
+        document.getElementById('mensaje').textContent = '';
+        document.getElementById('lista').innerHTML = '';
+        document.getElementById('url').value = '';
+        document.getElementById('link').style.display = 'none';
+        document.getElementById('copiar').textContent = 'Copiar link';
+        document.getElementById('buscar').disabled = false;
+        document.getElementById('buscar').textContent = 'Buscar';
+        document.getElementById('nombre').focus();
+      }
+
+      document.getElementById('form').addEventListener('submit', function (event) {
+        var nombre = document.getElementById('nombre').value.replace(/^\s+|\s+$/g, '');
+        if (nombre.length < 2) {
+          event.preventDefault();
+          document.getElementById('mensaje').textContent = 'Escribí el nombre del lugar.';
+          return;
+        }
+
+        if (!DATOS) {
+          event.preventDefault();
+          buscarLocal();
+          return;
+        }
+
+        if (!DATOS.scriptUrl) {
+          event.preventDefault();
+          document.getElementById('mensaje').textContent = 'No se pudo obtener la URL de la aplicación.';
+          return;
+        }
+
+        document.getElementById('form').action = DATOS.scriptUrl;
+        document.getElementById('buscar').textContent = 'Buscando…';
+      });
+
+      function buscarLocal() {
+        var boton = document.getElementById('buscar');
+        var nombre = document.getElementById('nombre').value.replace(/^\s+|\s+$/g, '');
+        var calle = document.getElementById('calle').value.replace(/^\s+|\s+$/g, '');
+
+        boton.disabled = true;
+        boton.textContent = 'Buscando…';
+        document.getElementById('mensaje').textContent = '';
+        document.getElementById('lista').innerHTML = '';
+        document.getElementById('link').style.display = 'none';
+
+        fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: nombre, calle: calle })
+        })
+          .then(function (response) {
+            return response.json().then(function (data) {
+              if (!response.ok) throw new Error(data.error || 'No se pudo buscar.');
+              return data;
+            });
+          })
+          .then(function (data) {
+            mostrarResultados(data.lugares || []);
+            if (!data.lugares || !data.lugares.length) {
+              document.getElementById('mensaje').textContent =
+                'No encontré ese lugar. Probá agregando la calle y la ciudad.';
+            }
+          })
+          .catch(function (error) {
+            document.getElementById('mensaje').textContent = error.message;
+          })
+          .then(function () {
+            boton.disabled = false;
+            boton.textContent = 'Buscar';
+          });
+      }
+
+      function iniciar() {
+        if (!DATOS) return;
+        if (DATOS.scriptUrl) document.getElementById('form').action = DATOS.scriptUrl;
+        document.getElementById('nombre').value = DATOS.nombre || '';
+        document.getElementById('calle').value = DATOS.calle || '';
+        if (DATOS.error) document.getElementById('mensaje').textContent = DATOS.error;
+        mostrarResultados(DATOS.lugares || []);
+      }
+
+      function mostrarResultados(resultado) {
+        var lista = document.getElementById('lista');
+        lista.innerHTML = '';
+        if (!resultado.length) return;
+
+        var titulo = document.createElement('h2');
+        titulo.textContent = resultado.length === 1 ? 'Lugar encontrado' : 'Elegí el lugar';
+        lista.appendChild(titulo);
+
+        for (var i = 0; i < resultado.length; i++) {
+          lista.appendChild(botonLugar(resultado[i], resultado.length === 1));
+        }
+        if (resultado.length === 1) {
+          mostrarLink(resultado[0].url);
+        }
+      }
+
+      function botonLugar(lugar, activo) {
+        var boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = activo ? 'lugar activo' : 'lugar';
+        boton.setAttribute('data-url', lugar.url);
+
+        var nombre = document.createElement('span');
+        nombre.textContent = lugar.nombre;
+        var direccion = document.createElement('span');
+        direccion.className = 'dir';
+        direccion.textContent = lugar.direccion;
+
+        boton.appendChild(nombre);
+        boton.appendChild(direccion);
+        boton.addEventListener('click', function () {
+          elegir(boton);
+        });
+        return boton;
+      }
+
+      function elegir(boton) {
+        var todos = document.querySelectorAll('button.lugar');
+        for (var j = 0; j < todos.length; j++) {
+          todos[j].className = 'lugar';
+        }
+        boton.className = 'lugar activo';
+        mostrarLink(boton.getAttribute('data-url'));
+      }
+
+      function mostrarLink(url) {
+        document.getElementById('url').value = url || '';
+        document.getElementById('link').style.display = 'block';
+        document.getElementById('copiar').textContent = 'Copiar link';
+        document.getElementById('link').scrollIntoView({ block: 'nearest' });
+      }
+
+      function copiar() {
+        var campo = document.getElementById('url');
+        var url = campo.value;
+        if (!url) return;
+
+        campo.focus();
+        campo.select();
+        campo.setSelectionRange(0, url.length);
+
+        var ok = false;
+        try {
+          ok = document.execCommand('copy');
+        } catch (e) {
+          ok = false;
+        }
+        if (ok) {
+          marcarCopiado();
+          return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(marcarCopiado, avisoCopiar);
+          return;
+        }
+        avisoCopiar();
+      }
+
+      function avisoCopiar() {
+        document.getElementById('mensaje').textContent = 'Mantené presionado el link y tocá Copiar.';
+      }
+
+      function marcarCopiado() {
+        document.getElementById('copiar').textContent = 'Copiado';
+      }
+
+      iniciar();
+    </script>
+  </body>
+</html>
